@@ -81,23 +81,11 @@ generate_public_url() {
     
     start_php_server
     
-    (cloudflared tunnel --url 127.0.0.1:${PORT} 2>&1 | tee /tmp/tunnel_output.txt) &
-    TUNNEL_PID=$!
-    
-    sleep 5
-    
-    if [ -f /tmp/tunnel_output.txt ]; then
-        URL=$(grep -oP 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' /tmp/tunnel_output.txt | head -1 || echo "")
-        if [ ! -z "$URL" ]; then
-            echo "$URL"
-        fi
-    fi
+    cloudflared tunnel --url 127.0.0.1:${PORT} 2>&1 | grep -oP 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' | head -1
     
     sleep 120
     
-    kill $TUNNEL_PID 2>/dev/null || true
     kill $PHP_PID 2>/dev/null || true
-    rm -f /tmp/tunnel_output.txt
 }
 
 run_localhost() {
