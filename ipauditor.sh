@@ -81,21 +81,19 @@ generate_public_url() {
     
     start_php_server
     
-    cloudflared tunnel --url 127.0.0.1:${PORT} > /tmp/tunnel_output.txt 2>&1 &
+    (cloudflared tunnel --url 127.0.0.1:${PORT} 2>&1 | tee /tmp/tunnel_output.txt) &
     TUNNEL_PID=$!
     
-    sleep 4
+    sleep 5
     
     if [ -f /tmp/tunnel_output.txt ]; then
         URL=$(grep -oP 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' /tmp/tunnel_output.txt | head -1 || echo "")
         if [ ! -z "$URL" ]; then
             echo "$URL"
-        else
-            echo "Error: Failed to extract URL"
         fi
-    else
-        echo "Error: Tunnel output file not found"
     fi
+    
+    sleep 120
     
     kill $TUNNEL_PID 2>/dev/null || true
     kill $PHP_PID 2>/dev/null || true
