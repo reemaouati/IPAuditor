@@ -75,21 +75,13 @@ start_php_server() {
 }
 
 generate_public_url() {
-    display_banner
     check_requirements
     initialize_json
     
-    echo ""
-    echo "Starting PHP Server on 127.0.0.1:${PORT}"
     start_php_server
     
-    echo "Generating Cloudflare Tunnel link..."
-    echo ""
+    cloudflared tunnel --url 127.0.0.1:${PORT} 2>&1 | grep -oP '(?<=https://)[^ ]+' | head -1
     
-    cloudflared tunnel --url 127.0.0.1:${PORT}
-    
-    echo ""
-    echo "Stopping PHP server"
     kill $PHP_PID 2>/dev/null || true
 }
 
