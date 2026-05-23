@@ -7,6 +7,7 @@ JSON_FILE="${SCRIPT_DIR}/ips.json"
 PHP_FILE="${SCRIPT_DIR}/server.php"
 PORT=8080
 PHP_PID=""
+TUNNEL_PID=""
 
 display_banner() {
     clear
@@ -80,9 +81,25 @@ generate_public_url() {
     
     start_php_server
     
-    cloudflared tunnel --url 127.0.0.1:${PORT} 2>&1 | grep -oP '(?<=https://)[^ ]+' | head -1
+    cloudflared tunnel --url 127.0.0.1:${PORT} > /tmp/tunnel_output.txt 2>&1 &
+    TUNNEL_PID=$!
     
+    sleep 4
+    
+    if [ -f /tmp/tunnel_output.txt ]; then
+        URL=$(grep -oP 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' /tmp/tunnel_output.txt | head -1 || echo "")
+        if [ ! -z "$URL" ]; then
+            echo "$URL"
+        else
+            echo "Error: Failed to extract URL"
+        fi
+    else
+        echo "Error: Tunnel output file not found"
+    fi
+    
+    kill $TUNNEL_PID 2>/dev/null || true
     kill $PHP_PID 2>/dev/null || true
+    rm -f /tmp/tunnel_output.txt
 }
 
 run_localhost() {
@@ -145,6 +162,10 @@ clear_ip_data() {
 cleanup() {
     if [ ! -z "$PHP_PID" ] && kill -0 $PHP_PID 2>/dev/null; then
         kill $PHP_PID 2>/dev/null || true
+    fi
+    
+    if [ ! -z "$TUNNEL_PID" ] && kill -0 $TUNNEL_PID 2>/dev/null; then
+        kill $TUNNEL_PID 2>/dev/null || true
     fi
 }
 
