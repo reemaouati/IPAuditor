@@ -7,7 +7,6 @@ JSON_FILE="${SCRIPT_DIR}/ips.json"
 PHP_FILE="${SCRIPT_DIR}/server.php"
 PORT=8080
 PHP_PID=""
-TUNNEL_PID=""
 
 display_banner() {
     clear
@@ -50,20 +49,22 @@ Usage: ./ipauditor.sh [OPTIONS]
 
 Options:
   -h, --help    Display this help message
-  -u, --url     Generate public URL and start listening
+  -u, --url     Generate public URL via Cloudflare Tunnel
+  -l, --local   Start server on localhost (127.0.0.1:8080)
   -i, --ip      Display stored IP data
   -c, --clear   Clear all stored data
 
 Examples:
   ./ipauditor.sh --help
   ./ipauditor.sh -u
+  ./ipauditor.sh --local
   ./ipauditor.sh --ip
 
 EOF
 }
 
 start_php_server() {
-    php -S localhost:${PORT} -t "${SCRIPT_DIR}" > /dev/null 2>&1 &
+    php -S 127.0.0.1:${PORT} -t "${SCRIPT_DIR}" > /dev/null 2>&1 &
     PHP_PID=$!
     sleep 2
     
@@ -73,63 +74,36 @@ start_php_server() {
     fi
 }
 
-generate_url() {
+generate_public_url() {
     display_banner
     check_requirements
     initialize_json
     
+    echo ""
+    echo "Starting PHP Server on 127.0.0.1:${PORT}"
     start_php_server
     
-    cloudflared tunnel --url localhost:${PORT} > /tmp/cloudflare_tunnel.log 2>&1 &
-    TUNNEL_PID=$!
-    
-    sleep 3
-    TUNNEL_URL=$(grep -oP 'https://[^ ]+' /tmp/cloudflare_tunnel.log | head -1 || echo "")
-    
-    if [ -z "$TUNNEL_URL" ]; then
-        echo "Error: Failed to establish Cloudflare Tunnel"
-        kill $PHP_PID 2>/dev/null || true
-        kill $TUNNEL_PID 2>/dev/null || true
-        exit 1
-    fi
-    
-    echo ""
-    echo "Public URL:"
-    echo "$TUNNEL_URL"
-    echo ""
-    echo "Listening for connections..."
-    echo "Press Ctrl+C to stop"
+    echo "Generating Cloudflare Tunnel link..."
     echo ""
     
-    listen_for_connections
+    cloudflared tunnel --url 127.0.0.1:${PORT}
     
-    cleanup
+    echo ""
+    echo "Stopping PHP server"
+    kill $PHP_PID 2>/dev/null || true
 }
 
-listen_for_connections() {
-    local connection_count=0
+run_localhost() {
+    display_banner
+    check_requirements
+    initialize_json
     
-    while true; do
-        if [ -f "$JSON_FILE" ]; then
-            local current_count=$(jq 'length' "$JSON_FILE" 2>/dev/null || echo 0)
-            
-            if [ "$current_count" -gt "$connection_count" ]; then
-                connection_count=$current_count
-                echo "[+] New connection detected"
-                
-                local latest=$(jq '.[-1]' "$JSON_FILE" 2>/dev/null)
-                if [ ! -z "$latest" ] && [ "$latest" != "null" ]; then
-                    local ip=$(echo "$latest" | jq -r '.ip // "N/A"')
-                    local timestamp=$(echo "$latest" | jq -r '.timestamp // "N/A"')
-                    echo "IP: $ip"
-                    echo "Time: $timestamp"
-                    echo ""
-                fi
-            fi
-        fi
-        
-        sleep 2
-    done
+    echo ""
+    echo "Starting PHP Server on 127.0.0.1:${PORT}"
+    echo "Real-time monitoring started"
+    echo ""
+    
+    php -S 127.0.0.1:${PORT} -t "${SCRIPT_DIR}"
 }
 
 display_ip_data() {
@@ -180,10 +154,6 @@ cleanup() {
     if [ ! -z "$PHP_PID" ] && kill -0 $PHP_PID 2>/dev/null; then
         kill $PHP_PID 2>/dev/null || true
     fi
-    
-    if [ ! -z "$TUNNEL_PID" ] && kill -0 $TUNNEL_PID 2>/dev/null; then
-        kill $TUNNEL_PID 2>/dev/null || true
-    fi
 }
 
 trap 'cleanup' EXIT INT TERM
@@ -200,7 +170,10 @@ main() {
             display_help
             ;;
         -u|--url)
-            generate_url
+            generate_public_url
+            ;;
+        -l|--local)
+            run_localhost
             ;;
         -i|--ip)
             display_ip_data
